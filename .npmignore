@@ -1,0 +1,6 @@
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+test/
+nodes/**/*.ts
+credentials/**/*.ts
+.npmignore

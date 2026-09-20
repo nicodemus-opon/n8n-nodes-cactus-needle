@@ -1,0 +1,4 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.n8n-node-cli/
