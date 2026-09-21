@@ -29,25 +29,52 @@ async function raw(method, p, body, opts = {}) {
 	} finally { clearTimeout(t); }
 }
 
+function loadFixtureTools() {
+	const vendored = path.join(ROOT, 'test', 'fixtures', 'tools.example.json');
+	if (fs.existsSync(vendored)) return JSON.parse(fs.readFileSync(vendored, 'utf8'));
+	return JSON.parse(fs.readFileSync(path.join(ROOT, '..', 'cactus-needle-docker', 'tools.example.json'), 'utf8'));
+}
+function mockHttpRequest(base) {
+	return async (opts) => {
+		const url = opts.url;
+		const method = opts.method ?? 'GET';
+		const isBinary = Buffer.isBuffer(opts.body);
+		const res = await fetch(url, {
+			method,
+			headers: opts.headers ?? { 'Content-Type': 'application/json' },
+			body: opts.body === undefined ? undefined : isBinary ? opts.body : JSON.stringify(opts.body),
+		});
+		const text = await res.text();
+		let body;
+		try {
+			body = text ? JSON.parse(text) : {};
+		} catch {
+			body = text;
+		}
+		if (opts.returnFullResponse) return { statusCode: res.status, body, headers: {} };
+		return body;
+	};
+}
 function loadNode() {
 	delete require.cache[require.resolve('../dist/nodes/CactusNeedle/CactusNeedle.node.js')];
 	return require('../dist/nodes/CactusNeedle/CactusNeedle.node.js').CactusNeedle;
 }
 function mockRun(NodeClass, params, creds, items = [{ json: {} }], extra = {}) {
 	const node = new NodeClass();
+	const base = (creds && creds.baseUrl) || BASE;
 	const ctx = {
 		getInputData: () => items,
 		getNodeParameter: (name, _idx, fallback) => (name in params ? params[name] : fallback),
 		getCredentials: async () => creds ?? { baseUrl: BASE, timeoutMs: 120000 },
 		getNode: () => ({ name: 'adv-test' }),
 		continueOnFail: () => !!extra.continueOnFail,
-		helpers: {},
+		helpers: { httpRequest: mockHttpRequest(base) },
 	};
 	return node.execute.call(ctx);
 }
 
 (async () => {
-	const tools = JSON.parse(fs.readFileSync(path.join(ROOT, '..', 'cactus-docker', 'tools.example.json'), 'utf8'));
+	const tools = loadFixtureTools();
 
 	// ---- RAW SERVER ----
 	let r = await raw('POST', '/complete', { tools: [], query: 'ping' });
@@ -171,7 +198,7 @@ function mockRun(NodeClass, params, creds, items = [{ json: {} }], extra = {}) {
 			getCredentials: async () => ({ baseUrl: BASE, timeoutMs: 60000 }),
 			getNode: () => ({ name: 'adv' }),
 			continueOnFail: () => false,
-			helpers: {},
+			helpers: { httpRequest: mockHttpRequest(BASE) },
 		};
 		const [rows] = await inst.execute.call(ctx);
 		const gotModel = rows.some((row) => 'name' in row.json && typeof row.json.name === 'string');

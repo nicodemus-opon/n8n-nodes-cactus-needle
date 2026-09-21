@@ -7,33 +7,24 @@
 #
 # ─── PREREQUISITES ─────────────────────────────────────────────────────────────
 #
-# @n8n/node-cli ≥ 0.23.0 is required. Earlier versions do not support the
-# provenance flag passed by `npm run release` in CI, and the publish step will
-# fail. Check the version installed in this project with:
-#
-#   npm list @n8n/node-cli
+# No minimum @n8n/node-cli version is needed for CI publishing anymore —
+# CI runs `npm publish --provenance` directly. `npm run release`
+# (n8n-node release) is only an optional local helper and must never run in CI
+# because it is interactive (prompts for bump, changelog, commit/tag/push).
 #
 # ─── ONE-TIME SETUP ────────────────────────────────────────────────────────────
 #
-# Option A — OIDC Trusted Publishing (recommended, no long-lived secrets):
-#   1. Log in to npmjs.com and open your package's settings.
+# OIDC Trusted Publishing (no long-lived secrets):
+#   1. Log in to npmjs.com and open package n8n-nodes-cactus-needle settings.
 #   2. Under "Publish access" → "Trusted Publishers", click "Add a publisher".
 #   3. Select GitHub Actions and fill in:
-#        Repository owner: <your-github-username-or-org>
-#        Repository name:  <your-repo-name>
+#        Repository owner: nicodemus-opon
+#        Repository name:  n8n-nodes-cactus-needle
 #        Workflow name:    publish.yml
-#        Environment:      (leave blank unless you use GitHub Environments)
-#   4. Leave the NPM_TOKEN secret unset in this repository. GitHub's OIDC
-#      token is used instead — no secret ever touches your repo settings.
-#
-# Option B — npm Automation Token (fallback):
-#   1. On npmjs.com: Access Tokens → Generate New Token → Granular Access Token.
-#      Scope it to this package with "Read and write" publish permission.
-#   2. In GitHub: Settings → Secrets and variables → Actions → New secret.
-#      Name it NPM_TOKEN and paste the token value.
-#
-# Both options work with --provenance. Provenance is signed by GitHub's OIDC
-# infrastructure regardless of how npm authentication is handled.
+#        Environment:      (leave blank)
+#   4. Leave the NPM_TOKEN secret unset. GitHub's OIDC token is used instead.
+#      `registry-url` below is required to wire npm auth to that OIDC token.
+#      Provenance is signed by GitHub's OIDC infrastructure.
 #
 # ─── TAG CONVENTION ────────────────────────────────────────────────────────────
 #
@@ -43,12 +34,17 @@
 #
 # ─── RELEASE PROCESS ───────────────────────────────────────────────────────────
 #
-# Run the following command locally to start an interactive release:
+# 0.1.0 was published manually from a terminal. All subsequent releases go
+# via GitHub: bump locally, push the tag, CI publishes with provenance.
 #
-#   npm run release
+#   npm run lint && npm run build
+#   npm version patch -m "chore(release): %s"  # or minor/major, e.g. 0.1.0 -> 0.1.1
+#   git push origin main --follow-tags         # pushes commit + tag (e.g. 0.1.1)
 #
-# This will lint, build, prompt for a version bump, update the changelog,
-# commit, tag, and push — which triggers this workflow to publish to npm.
+# Pushing a tag like 0.1.1 triggers this workflow, which publishes to npm.
+# Never run `npm run release` / `npm publish` in CI or locally for a
+# GitHub-managed release — CI handles publishing. Do not re-push 0.1.0;
+# npm rejects republishing an existing version.
 
 name: Publish
 
@@ -77,21 +73,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Release
-        # Publishes to npm with a provenance attestation (requires id-token: write above).
-        # Lint and build run automatically as part of the release process.
-        #
-        # Option A (OIDC): leave NPM_TOKEN unset — the token step is skipped and
-        #   npm uses the OIDC exchange instead.
-        # Option B (token): set NPM_TOKEN in repo secrets — it is written to
-        #   .npmrc here before publishing.
-        run: |
-          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm run release
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm with provenance
+        # OIDC Trusted Publishing: auth comes from the id-token above via
+        # registry-url, no NPM_TOKEN needed. Tag (e.g. 0.1.1) must match
+        # package.json version; npm rejects republishing an existing version.
+        run: npm publish --provenance --access public

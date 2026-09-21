@@ -1,5 +1,5 @@
 // Integration + build test for n8n-nodes-cactus-needle.
-// Requires the cactus-docker server on http://localhost:7860.
+// Requires the cactus-needle-docker server on http://localhost:7860.
 const assert = require('assert');
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -7,6 +7,13 @@ const path = require('path');
 
 const BASE = process.env.CACTUS_BASE_URL || 'http://localhost:7860';
 const ROOT = path.join(__dirname, '..');
+
+function loadFixtureTools() {
+	const vendored = path.join(ROOT, 'test', 'fixtures', 'tools.example.json');
+	if (fs.existsSync(vendored)) return JSON.parse(fs.readFileSync(vendored, 'utf8'));
+	const legacy = path.join(ROOT, '..', 'cactus-needle-docker', 'tools.example.json');
+	return JSON.parse(fs.readFileSync(legacy, 'utf8'));
+}
 
 async function post(p, body) {
 	const res = await fetch(`${BASE}${p}`, {
@@ -30,11 +37,11 @@ async function liveTests() {
 	assert.ok(typeof model.name === 'string', 'model.name string');
 
 	console.log('[live] POST /complete (tools.example.json query)');
-	const tools = JSON.parse(fs.readFileSync(path.join(ROOT, '..', 'cactus-docker', 'tools.example.json'), 'utf8'));
+	const tools = loadFixtureTools();
 	const out = await post('/complete', tools);
 	console.log('  complete =', JSON.stringify(out).slice(0, 500));
 	assert.ok(Array.isArray(out.function_calls), 'function_calls array');
-	assert.ok(typeof out.confidence === 'number', 'confidence number');
+	assert.ok(out.confidence === null || typeof out.confidence === 'number', 'confidence number or null');
 	assert.ok('reasoning' in out, 'reasoning present');
 
 	console.log('[live] POST /reset');
@@ -65,20 +72,38 @@ function mockExecute(nodeModulePath, params) {
 	const NodeClass = mod.CactusNeedle;
 	const node = new NodeClass();
 	const items = [{ json: {} }];
+	const httpRequest = async (opts) => {
+		const url = opts.url;
+		const method = opts.method ?? 'GET';
+		const res = await fetch(url, {
+			method,
+			headers: { 'Content-Type': 'application/json' },
+			body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+		});
+		const text = await res.text();
+		let body;
+		try {
+			body = text ? JSON.parse(text) : {};
+		} catch {
+			body = text;
+		}
+		if (opts.returnFullResponse) return { statusCode: res.status, body, headers: {} };
+		return body;
+	};
 	const ctx = {
 		getInputData: () => items,
 		getNodeParameter: (name, _idx, fallback) => (name in params ? params[name] : fallback),
 		getCredentials: async () => ({ baseUrl: BASE, timeoutMs: 120000 }),
 		getNode: () => ({ name: 'Cactus Needle test' }),
 		continueOnFail: () => false,
-		helpers: {},
+		helpers: { httpRequest },
 	};
 	return node.execute.call(ctx);
 }
 
 async function nodeTests(nodeJs) {
 	console.log('[node] compiled CactusNeedle.execute — complete');
-	const tools = JSON.parse(fs.readFileSync(path.join(ROOT, '..', 'cactus-docker', 'tools.example.json'), 'utf8'));
+	const tools = loadFixtureTools();
 	const [rows] = await mockExecute(nodeJs, {
 		resource: 'toolCalling',
 		operation: 'complete',

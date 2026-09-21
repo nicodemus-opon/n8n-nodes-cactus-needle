@@ -1,8 +1,11 @@
 {
 	"name": "n8n-nodes-cactus-needle",
 	"version": "0.1.0",
-	"description": "n8n community node for Cactus Needle 3 — on-device tool-calling via your cactus-docker playground server (POST /complete, /reset, /model, /finetune).",
+	"description": "n8n community node for Cactus Needle 3 — on-device tool-calling via your cactus-docker playground server (POST /complete, /reset, /model, /load-model, /finetune).",
 	"license": "MIT",
+	"engines": {
+		"node": ">=20"
+	},
 	"homepage": "https://github.com/nicodemus-opon/n8n-nodes-cactus-needle",
 	"keywords": [
 		"n8n-community-node-package"
@@ -18,13 +21,14 @@
 	"scripts": {
 		"build": "n8n-node build",
 		"build:tsc": "tsc && npm run copy:icons",
-		"copy:icons": "mkdir -p dist/icons && cp icons/*.svg dist/icons/",
+		"copy:icons": "node scripts/copy-icons.js",
 		"dev": "n8n-node dev",
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
 		"release": "n8n-node release",
 		"scan": "scan-community-package n8n-nodes-cactus-needle",
-		"test": "node ./test/run.js && node ./test/adversarial.js",
+		"test": "node ./test/unit.js && node ./test/run.js && node ./test/adversarial.js",
+		"test:unit": "node ./test/unit.js",
 		"test:integration": "node ./test/run.js",
 		"test:adversarial": "node ./test/adversarial.js",
 		"prepublishOnly": "npm run build"
@@ -43,7 +47,7 @@
 		]
 	},
 	"devDependencies": {
-		"@n8n/node-cli": "*",
+		"@n8n/node-cli": "^0.48.5",
 		"@n8n/scan-community-package": "^0.36.0",
 		"@types/node": "^26.6.2",
 		"eslint": "9.39.4",

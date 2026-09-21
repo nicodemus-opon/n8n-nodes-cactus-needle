@@ -28,6 +28,15 @@ export class CactusNeedleApi implements ICredentialType {
 			default: 120000,
 			description: 'How long to wait for /complete before failing. First request after a cold start can take a while',
 		},
+		{
+			displayName: 'OpenRouter API Key',
+			name: 'openRouterApiKey',
+			type: 'string',
+			typeOptions: { password: true },
+			default: '',
+			description:
+				'Optional. Stored securely here instead of the workflow. Used to synthesize training data for Training > Start Fine-Tune (sk-or-…).',
+		},
 	];
 
 	test: ICredentialTestRequest = {
